@@ -1,0 +1,9 @@
+altgraph==0.17.3
+geographiclib==2.0
+geopy==2.3.0
+mysqlclient==2.1.1
+paho-mqtt==1.6.1
+pkg_resources==0.0.0
+pyinstaller==5.7.0
+pyinstaller-hooks-contrib==2022.15
+schedule==1.1.0

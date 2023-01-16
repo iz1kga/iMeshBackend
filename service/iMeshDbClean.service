@@ -1,0 +1,8 @@
+[Unit]
+Description=iMeshBackend service
+[Service]
+Type=simple
+ExecStart=/bin/sh -c "/usr/local/bin/iMeshDbClean"
+ExecStop=/bin/sh -c "killall -9 iMeshDbClean"
+[Install]
+WantedBy=multi-user.target
