@@ -4,48 +4,71 @@ if [ "$EUID" -ne 0 ]
   exit
 fi
 
-echo MQTT Host:
-read mqtthost
-echo MQTT Port:
-read mqttport
-echo MQTT User:
-read mqttuser
-echo MQTT Password:
-read mqttpwd
-
-echo MYSQL Host:
-read mysqlhost
-echo MYSQL Database:
-read mysqldb
-echo MYSQL User:
-read mysqluser
-echo MYSQL Password:
-read mysqlpwd
-
 mkdir -p /etc/iMeshBackend/
-cd /etc/iMeshBackend/
 
-echo [MQTT] > iMeshBackend.conf
-echo host=$mqtthost >> iMeshBackend.conf
-echo port=$mqttport  >> iMeshBackend.conf
-echo username=$mqttuser >> iMeshBackend.conf
-echo password=$mqttpwd >> iMeshBackend.conf
 
-echo [MYSQL] >> iMeshBackend.conf
-echo host=$mysqlhost >> iMeshBackend.conf
-echo database=$mysqldb  >> iMeshBackend.conf
-echo username=$mysqluser >> iMeshBackend.conf
-echo password=$mysqlpwd >> iMeshBackend.conf
+read -r -p "Do you want to set configuration? [y/N] " response
+if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]
+then
+    echo MQTT Host:
+    read mqtthost
+    echo MQTT Port:
+    read mqttport
+    echo MQTT User:
+    read mqttuser
+    echo MQTT Password:
+    read mqttpwd
 
-sudo cp ./dist/iMeshBackend /usr/local/bin/
+    echo MYSQL Host:
+    read mysqlhost
+    echo MYSQL Database:
+    read mysqldb
+    echo MYSQL User:
+    read mysqluser
+    echo MYSQL Password:
+    read mysqlpwd
 
-sudo cp ./service/iMeshBackend.service /etc/systemd/system
-sudo cp ./service/iMeshDbClean.service /etc/systemd/system
-sudo systemctl daemon-reload
-sudo systemctl enable iMeshBackend
-sudo systemctl enable iMeshDbClean
-sudo systemctl daemon-reload
-sudo systemctl stop iMeshBackend
-sudo systemctl start iMeshBackend
-sudo systemctl stop iMeshDbClean
-sudo systemctl start iMeshDbClean
+    echo [MQTT] > /etc/iMeshBackend/iMeshBackend.conf
+    echo host=$mqtthost >> /etc/iMeshBackend/iMeshBackend.conf
+    echo port=$mqttport  >> /etc/iMeshBackend/iMeshBackend.conf
+    echo username=$mqttuser >> /etc/iMeshBackend/iMeshBackend.conf
+    echo password=$mqttpwd >> /etc/iMeshBackend/iMeshBackend.conf
+
+    echo [MYSQL] >> /etc/iMeshBackend/iMeshBackend.conf
+    echo host=$mysqlhost >> /etc/iMeshBackend/iMeshBackend.conf
+    echo database=$mysqldb  >> /etc/iMeshBackend/iMeshBackend.conf
+    echo username=$mysqluser >> /etc/iMeshBackend/iMeshBackend.conf
+    echo password=$mysqlpwd >> /etc/iMeshBackend/iMeshBackend.conf
+fi
+
+read -r -p "Do you want to update binary files? [y/N] " response
+if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]
+then
+    echo "Stopping Services"
+    systemctl stop iMeshBackend
+    systemctl stop iMeshDbClean
+
+    echo "Installing binary files"
+    cp ./dist/* /usr/local/bin/
+
+    echo "Starting Services"
+    systemctl start iMeshBackend
+    systemctl start iMeshDbClean
+
+fi
+
+read -r -p "Do you want to install as service? [y/N] " response
+if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]
+then
+    cp ./service/iMeshBackend.service /etc/systemd/system
+    cp ./service/iMeshDbClean.service /etc/systemd/system
+    systemctl daemon-reload
+    systemctl enable iMeshBackend
+    systemctl enable iMeshDbClean
+    systemctl daemon-reload
+    systemctl stop iMeshBackend
+    systemctl start iMeshBackend
+    systemctl stop iMeshDbClean
+    systemctl start iMeshDbClean
+fi
+

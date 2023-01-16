@@ -1,5 +1,5 @@
 [Unit]
-Description=iMeshDbClean service
+Description=iMeshBackend service
 [Service]
 Type=simple
 ExecStart=/bin/sh -c "/usr/local/bin/iMeshBackend"
