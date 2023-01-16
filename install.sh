@@ -1,5 +1,5 @@
 #!/bin/bash
-#IZ1KGA
+#IZ1KGA 2023
 if [ "$EUID" -ne 0 ]
   then echo "Please run as root"
   exit
