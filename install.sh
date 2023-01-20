@@ -42,6 +42,19 @@ then
     echo password=$mysqlpwd >> /etc/iMeshBackend/iMeshBackend.conf
 fi
 
+
+read -r -p "Do you want to Build Binaries? [y/N] " response
+if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]
+then
+    python3 -m venv ./.buildVenv
+    source .buildVenv/bin/activate
+    pip install -r requirements.txt
+    ./build.sh
+    deactivate
+    rm -r .buildVenv
+fi
+
+
 read -r -p "Do you want to update binary files? [y/N] " response
 if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]
 then
