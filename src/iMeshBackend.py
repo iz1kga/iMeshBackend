@@ -25,7 +25,7 @@ def updateQuery(db, c, table, field, value, id):
     try:
         query = ("UPDATE %s SET %s=%s WHERE id=\"%s\"" 
                  % (table, field, value, id))
-        print(query)
+        #print(query)
         c.execute(query)
         db.commit()
     except Exception as e:
@@ -43,7 +43,7 @@ def on_connect(client, userdata, flags, rc):
 # The callback for when a PUBLISH message is received from the server.
 
 def on_message(client, userdata, msg):
-    print("received MQTT message: %s - %s" % (msg.topic, msg.payload))
+    #print("received MQTT message: %s - %s" % (msg.topic, msg.payload))
     payload = json.loads(msg.payload.decode("utf-8"))
     db=MySQLdb.connect(config['MYSQL']['host'], config['MYSQL']['username'], config['MYSQL']['password'], config['MYSQL']['database'])
     c=db.cursor(MySQLdb.cursors.DictCursor)
@@ -56,20 +56,22 @@ def on_message(client, userdata, msg):
 
 #   print("HEXID: " + str(tohex(payload["from"], 32)))
     query = ("SELECT * FROM meshNodes where id=\"%s\"" % (nodeID, ))
-    print(query)
+    #print(query)
     c.execute(query)
     data = c.fetchall()
 #    print(data)
     if len(data) > 0:
         if (payload["id"] == data[0]["lastPacketID"]):
-            print("Node %s: discarded packet allready received" % (nodeID,))
+            print("Node %s: discarded packet %s received from %s" % (nodeID, payload["id"], payload["sender"]))
             return
         msgDT = datetime.fromtimestamp(payload["timestamp"])
         if payload["type"] == "text":
             pubPayload="{\"timestamp\":\"%s\", \"message\":\"%s (%s) - %s\", \"type\":\"text\"}" % (msgDT, data[0]["longName"], nodeID, payload["payload"]["text"])
         else:
             pubPayload="{\"timestamp\":\"%s\", \"message\":\"Received %s frame from %s (%s)\", \"type\":\"info\"}" % (msgDT, payload["type"], data[0]["longName"], nodeID, )
+        print("Processing packet %s received from %s" % (payload["id"], nodeID))
         client.publish("msh/2/stat/updates", payload=pubPayload, qos=0, retain=False)
+        print("update Published")
 #        print("found")
         if payload["type"] == "position":
             try:
@@ -81,26 +83,27 @@ def on_message(client, userdata, msg):
                                 payload["timestamp"],
                                 payload["timestamp"],
                                 nodeID))
-                    print(query)
+                    ##print(query)
                     c.execute(query)
                     db.commit()
 
                     query = ("SELECT * from  nodesPositionHistory WHERE nodeID=\"%s\" ORDER BY timestamp DESC LIMIT 1"
                           % (nodeID,))
-                    print(query)
+                    #print(query)
                     c.execute(query)
                     posData = c.fetchall()
                     dist = 100
                     if len(posData) > 0:
                         dist = distance.distance((posData[0]["latitude"], posData[0]["longitude"]),
                                (payload["payload"]["latitude_i"]/10000000, payload["payload"]["longitude_i"]/10000000)).km
-                        print("DISTANCE %s" % (dist, ))
                     if dist > 0.25:
                         query = ("INSERT INTO nodesPositionHistory (nodeID, latitude, longitude, timestamp) VALUES (\"%s\", %s, %s, %s)"
                               % (nodeID, payload["payload"]["latitude_i"]/10000000, payload["payload"]["longitude_i"]/10000000, payload["timestamp"],))
-                        print(query)
+                        #print(query)
                         c.execute(query)
                         db.commit()
+                    else:
+                        print("Position update discarded, distance < 0.25km (%s km)" % (dist, ))
 
             except Exception as e:
                 print(e)
@@ -109,7 +112,7 @@ def on_message(client, userdata, msg):
             try:
                 query = ("UPDATE meshNodes SET longname=\"%s\", shortname=\"%s\", hardware=\"%s\" WHERE id=\"%s\"" 
                          % (payload["payload"]["longname"], payload["payload"]["shortname"], hwModels[payload["payload"]["hardware"]], nodeID))
-                print(query)
+                #print(query)
                 c.execute(query)
                 db.commit()
             except Exception as e:
@@ -137,7 +140,7 @@ def on_message(client, userdata, msg):
             print("###########################################################")
             print("Node %s: Insert into DB" % (nodeID,))
             query = ("INSERT INTO meshNodes (id, positionTimestamp,timestamp) VALUES (\"%s\", \"%s\", \"%s\")" % (nodeID, 0, payload["timestamp"],))
-            print(query)
+            #print(query)
             print("###########################################################")
             c.execute(query)
             db.commit()
