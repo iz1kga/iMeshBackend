@@ -48,7 +48,10 @@ if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]
 then
     python3 -m venv ./.buildVenv
     source .buildVenv/bin/activate
+    pip install wheel
+    python setup.py bdist_wheel
     pip install -r requirements.txt
+
     ./build.sh
     deactivate
     rm -r .buildVenv

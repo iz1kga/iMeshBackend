@@ -64,11 +64,11 @@ def on_message(client, userdata, msg):
         if (payload["id"] == data[0]["lastPacketID"]):
             print("Node %s: discarded packet allready received" % (nodeID,))
             return
-        msgDT = datetime.fromtimestamp(payload["timestamp"]).strftime('%H:%M:%S')
+        msgDT = datetime.fromtimestamp(payload["timestamp"])
         if payload["type"] == "text":
-            pubPayload="%s: %s (%s) - %s" % (msgDT, data[0]["longName"], nodeID, payload["payload"]["text"])
+            pubPayload="{\"timestamp\":\"%s\", \"message\":\"%s (%s) - %s\", \"type\":\"text\"}" % (msgDT, data[0]["longName"], nodeID, payload["payload"]["text"])
         else:
-            pubPayload="%s: Received %s frame from %s (%s)" % (msgDT, payload["type"], data[0]["longName"], nodeID, )
+            pubPayload="{\"timestamp\":\"%s\", \"message\":\"Received %s frame from %s (%s)\", \"type\":\"info\"}" % (msgDT, payload["type"], data[0]["longName"], nodeID, )
         client.publish("msh/2/stat/updates", payload=pubPayload, qos=0, retain=False)
 #        print("found")
         if payload["type"] == "position":
