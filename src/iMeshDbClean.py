@@ -18,7 +18,7 @@ config.read(configFile)
 def dbClean():
     db=MySQLdb.connect(config['MYSQL']['host'], config['MYSQL']['username'], config['MYSQL']['password'], config['MYSQL']['database'])
     c=db.cursor(MySQLdb.cursors.DictCursor)
-    ts=int(time.time())-86400
+    ts=int(time.time())-(30*24*60*60)
     query = ("DELETE FROM meshNodes where timestamp<%s" % (ts, ))
     print(query)
     c.execute(query)

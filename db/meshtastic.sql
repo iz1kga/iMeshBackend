@@ -1,3 +1,5 @@
+-- Adminer 4.8.1 MySQL 8.0.32-0ubuntu0.20.04.2 dump
+
 SET NAMES utf8;
 SET time_zone = '+00:00';
 SET foreign_key_checks = 0;
@@ -13,13 +15,16 @@ CREATE TABLE `meshNodes` (
   `latitude` float DEFAULT '0',
   `longitude` float DEFAULT '0',
   `altitude` float DEFAULT '0',
-  `batteryLevel` int DEFAULT '0',
-  `batteryVoltage` int DEFAULT '0',
-  `temperature` float DEFAULT '0',
-  `humidity` float DEFAULT '0',
-  `pressure` float DEFAULT '0',
+  `batteryLevel` int DEFAULT NULL,
+  `batteryVoltage` float DEFAULT NULL,
+  `envVoltage` float DEFAULT NULL,
+  `envCurrent` float DEFAULT NULL,
+  `temperature` float DEFAULT NULL,
+  `humidity` float DEFAULT NULL,
+  `pressure` float DEFAULT NULL,
   `airUtil` float DEFAULT '0',
   `chUtil` float DEFAULT '0',
+  `isRouter` int DEFAULT '0',
   `lastPacketID` bigint unsigned DEFAULT '0',
   `positionTimestamp` bigint unsigned DEFAULT '0',
   `timestamp` bigint unsigned DEFAULT '0',
@@ -36,3 +41,25 @@ CREATE TABLE `nodesPositionHistory` (
   `timestamp` bigint unsigned NOT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+
+DROP TABLE IF EXISTS `packetIdHistory`;
+CREATE TABLE `packetIdHistory` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `nodeID` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `packetID` bigint DEFAULT NULL,
+  `timestamp` bigint unsigned DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+
+DROP TABLE IF EXISTS `packetRates`;
+CREATE TABLE `packetRates` (
+  `id` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `packetRate` bigint NOT NULL DEFAULT '0',
+  `packetRateTS` json NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+
+-- 2023-02-06 10:51:24
