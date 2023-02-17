@@ -135,6 +135,7 @@ def packetIsValid(db, c, nodeID, packetID, timestamp, sender):
 def on_connect(client, userdata, flags, rc):
     logger.info("%s - Connected with result code %s" % (datetime.now(), str(rc), ))
     client.subscribe("msh/2/json/LongFast/#")
+#    client.subscribe("msh/decoded/data")
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
@@ -274,7 +275,7 @@ def on_message(client, userdata, msg):
                 query = ("INSERT INTO meshNodes (id, positionTimestamp,timestamp) VALUES (\"%s\", \"%s\", \"%s\")" % (nodeID, 0, payload["timestamp"],))
                 c.execute(query)
                 db.commit()
-                query = ("INSERT INTO packetRates (nodeID) VALUES (\"%s\")" % (nodeID, ))
+                query = ("INSERT INTO packetRates (id, packetRateTS) VALUES (\"%s\", \"{\\\"ts\\\":[]}\")" % (nodeID, ))
                 c.execute(query)
                 db.commit()
             except Exception as e:
