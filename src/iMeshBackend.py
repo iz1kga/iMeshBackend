@@ -10,6 +10,7 @@ import os.path
 import logging
 import logging.handlers
 import numpy as np
+import re
 
 configFile = '/etc/iMeshBackend/iMeshBackend.conf'
 logfile = '/var/log/iMeshBackend.log'
@@ -56,7 +57,51 @@ if not os.path.isfile(configFile):
 config = configparser.ConfigParser()
 config.read(configFile)
 
-hwModels = ("UNSET", "TLORA_V2", "TLORA_V1", "TLORA_V2_1_1P6", "TBEAM", "HELTEC_V2_0", "TBEAM_V0P7", "T_ECHO", "TLORA_V1_1P3", "RAK4631", "HELTEC_V2_1", "HELTEC_V1", "LILYGO_TBEAM_S3_CORE", "RAK11200", "NANO_G1", "TLORA_V2_1_1P8", "STATION_G1", "LORA_RELAY_V1", "NRF52840DK", "PPR", "GENIEBLOCKS", "NRF52_UNKNOWN", "PORTDUINO", "ANDROID_SIM", "DIY_V1", "NRF52840_PCA10059", "DR_DEV", "M5STACK", "PRIVATE_HW")
+hwModels = { 0:"UNSET",
+             1:"TLORA_V2",
+             2:"TLORA_V1",
+             3:"TLORA_V2_1_1P6",
+             4:"TBEAM",
+             5:"HELTEC_V2_0",
+             6:"TBEAM_V0P7",
+             7:"T_ECHO",
+             8:"TLORA_V1_1P3",
+             9:"RAK4631",
+             10:"HELTEC_V2_1",
+             11:"HELTEC_V1",
+             12:"LILYGO_TBEAM_S3_CORE",
+             13:"RAK11200",
+             14:"NANO_G1",
+             15:"TLORA_V2_1_1P8",
+             16:"TLORA_T3_S3",
+             17:"NANO_G1_EXPLORER",
+             25:"STATION_G1",
+             32:"LORA_RELAY_V1",
+             33:"NRF52840DK",
+             34:"PPR",
+             35:"GENIEBLOCKS",
+             36:"NRF52_UNKNOWN",
+             37:"PORTDUINO",
+             39:"DIY_V1",
+             40:"NRF52840_PCA10059",
+             41:"DR_DEV",
+             42:"M5STACK",
+             43:"HELTEC_V3",
+             44:"HELTEC_WSL_V3",
+             45:"BETAFPV_2400_TX",
+             46:"BETAFPV_900_NANO_TX",
+             255:"PRIVATE_HW"
+           }
+
+
+
+("UNSET", "TLORA_V2", "TLORA_V1", "TLORA_V2_1_1P6",
+            "TBEAM", "HELTEC_V2_0", "TBEAM_V0P7", "T_ECHO",
+            "TLORA_V1_1P3", "RAK4631", "HELTEC_V2_1", "HELTEC_V1",
+            "LILYGO_TBEAM_S3_CORE", "RAK11200", "NANO_G1", "TLORA_V2_1_1P8", 
+            "STATION_G1", "LORA_RELAY_V1", "NRF52840DK", "PPR", "GENIEBLOCKS", 
+            "NRF52_UNKNOWN", "PORTDUINO", "ANDROID_SIM", "DIY_V1", "NRF52840_PCA10059", 
+            "DR_DEV", "M5STACK", "PRIVATE_HW")
 
 def tohex(val, nbits):
   return hex((val + (1 << nbits)) % (1 << nbits))
@@ -99,6 +144,8 @@ def computePacketRate(db, c, nodeID, ts):
 
 def updateQuery(db, c, table, field, value, id):
     try:
+        if type(value) == str:
+            value = "'"+value+"'"
         query = ("UPDATE %s SET %s=%s WHERE id=\"%s\""
                  % (table, field, value, id))
         c.execute(query)
@@ -135,11 +182,13 @@ def packetIsValid(db, c, nodeID, packetID, timestamp, sender):
 def on_connect(client, userdata, flags, rc):
     logger.info("%s - Connected with result code %s" % (datetime.now(), str(rc), ))
     client.subscribe("msh/2/json/LongFast/#")
+    client.subscribe("msh/2/json/MediumFast/#")
 #    client.subscribe("msh/decoded/data")
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
     rxTime = int(time.time())
+    channel = msg.topic.split("/")[3]
     try:
         payload = json.loads(msg.payload.decode("utf-8"))
         db=MySQLdb.connect(config['MYSQL']['host'], config['MYSQL']['username'], config['MYSQL']['password'], config['MYSQL']['database'])
@@ -225,14 +274,47 @@ def on_message(client, userdata, msg):
                 except Exception as e:
                     logger.error("%s ERROR: %s" % (datetime.now(), e, ))
             if payload["type"] == "nodeinfo":
-                try:
-                    query = ("UPDATE meshNodes SET longname=\"%s\", shortname=\"%s\", hardware=\"%s\" WHERE id=\"%s\"" 
-                          % (payload["payload"]["longname"], payload["payload"]["shortname"], hwModels[payload["payload"]["hardware"]], nodeID))
-                    c.execute(query)
-                    db.commit()
+               nodeName = payload["payload"]["longname"].replace("_", " ")
+               logger.info("%s - Node %s(%s): received node name -> %s"
+                           % (datetime.now(), nodeID, data[0]["shortName"], nodeName, ))
+               matches = re.search("([A-Za-z0-9-\\\/]+\s?)(GW\s)?(433\s?|868\s?)?([A-Fa-f0-9]{4})?", nodeName)
+               logger.debug("%s - Node %s(%s): matches -> %s"
+                            % (datetime.now(), nodeID, data[0]["shortName"], matches, ))
+               try:
+                   longName = matches[1].strip(" ")
+                   logger.debug("%s - Node %s(%s): matched name -> %s"
+                                % (datetime.now(), nodeID, data[0]["shortName"], longName, ))
+               except Exception as e:
+                   longName = nodeName
+                   logger.error("%s ERROR: can't match %s -> %s" % (datetime.now(), nodeName, e, ))
+               if matches[4] != None:
+                   longName = longName + "_" + matches[4].strip(" ")
+               #print("%s | %s" % (payload["payload"]["longname"], matches.groups()))
+               #print("--%s--" % matches[2].strip())
+               #updateQuery(db, c, "meshNodes", "longName", longName, nodeID)
+               try:
+                   if matches[2].strip(" ") == "GW":
+                       logger.info("%s - Node %s(%s): set as Router" % (datetime.now(), nodeID, data[0]["shortName"]))
+                       updateQuery(db, c, "meshNodes", "isRouter", 2, nodeID)
+               except Exception as e:
+                   logger.error("%s ERROR GW Match: %s" % (datetime.now(), e, ))
+               try:
+                   if matches[3].strip(" ") != None:
+                       logger.info("%s - Node %s(%s): set qrg %s" % (datetime.now(), nodeID, data[0]["shortName"], matches[3].strip(" ")))
+                       updateQuery(db, c, "meshNodes", "qrg", matches[3].strip(" "), nodeID)
+               except Exception as e:
+                   logger.error("%s ERROR QRG match: %s" % (datetime.now(), e, ))
+               try:
+                    #query = ("UPDATE meshNodes SET longname=\"%s\", shortname=\"%s\", hardware=\"%s\" WHERE id=\"%s\"" 
+                    #      % (longName, payload["payload"]["shortname"], hwModels[payload["payload"]["hardware"]], nodeID))
+                    #c.execute(query)
+                    #db.commit()
+                    updateQuery(db, c, "meshNodes", "longname", longName, nodeID)
+                    updateQuery(db, c, "meshNodes", "shortname", payload["payload"]["shortname"], nodeID)
+                    updateQuery(db, c, "meshNodes", "hardware", hwModels[payload["payload"]["hardware"]], nodeID)
                     updateQuery(db, c, "meshNodes", "timestamp", payload["timestamp"], nodeID)
-                except Exception as e:
-                    logger.error("%s ERROR: %s" % (datetime.now(), e, ))
+               except Exception as e:
+                    logger.error("%s ERROR Update DB nodeinfo: %s" % (datetime.now(), e, ))
 
             if payload["type"] == "telemetry":
                 if "temperature" in payload["payload"]:
@@ -266,6 +348,7 @@ def on_message(client, userdata, msg):
             PR = computePacketRate(db, c, nodeID, int(time.time()))
             logger.info("%s - Node %s(%s): Packet Rate %s(s) / %s(p/h)"
                      % (datetime.now(), nodeID, data[0]["shortName"], PR[0], PR[1]))
+            updateQuery(db, c, "meshNodes", "channel", "\""+channel+"\"", nodeID)
 
         else:
             try:
