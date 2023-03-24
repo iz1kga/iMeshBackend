@@ -253,9 +253,18 @@ def on_message(client, userdata, msg):
                         logger.error("%s ERROR updating telemetry: %s" % (datetime.now(), e, ))
 
             #update Timestamp, SNR and RSSI
-            updateQuery(db, c, "meshNodes", "timestamp", payload["rxTime"], nodeID)
-            updateQuery(db, c, "meshNodes", "rxSnr", payload["rxSnr"], nodeID)
-            updateQuery(db, c, "meshNodes", "rxRssi", payload["rxRssi"], nodeID)
+            try:
+                updateQuery(db, c, "meshNodes", "timestamp", payload["rxTime"], nodeID)
+            except Excetpion as e:
+                logger.error("%s ERROR: %s" % (datetime.now(), e, ))
+            try:
+                updateQuery(db, c, "meshNodes", "rxSnr", payload["rxSnr"], nodeID)
+            except Excetpion as e:
+                logger.error("%s ERROR: %s" % (datetime.now(), e, ))
+            try:
+                updateQuery(db, c, "meshNodes", "rxRssi", payload["rxRssi"], nodeID)
+            except Excetpion as e:
+                logger.error("%s ERROR: %s" % (datetime.now(), e, ))
 
             #update gwID and Sender (maybe always the same?)
             updateQuery(db, c, "meshNodes", "gwID", payload["gwID"], nodeID)
