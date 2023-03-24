@@ -153,6 +153,12 @@ def updateQuery(db, c, table, field, value, id):
     except Exception as e:
         logger.error("%s ERROR: %s" % (datetime.now(), e, ))
 
+def getNodeName(db, c, id):
+    query = ("SELECT longName FROM meshNodes where id=\"%s\"" % (id, ))
+    c.execute(query)
+    data = c.fetchall()
+    return str(data[0]['longName'])
+
 def packetIsValid(db, c, nodeID, packetID, timestamp, sender):
     historyLimit = 1800
     try:
@@ -181,24 +187,21 @@ def packetIsValid(db, c, nodeID, packetID, timestamp, sender):
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
     logger.info("%s - Connected with result code %s" % (datetime.now(), str(rc), ))
-    client.subscribe("msh/2/json/LongFast/#")
-    client.subscribe("msh/2/json/MediumFast/#")
-#    client.subscribe("msh/decoded/data")
+#    client.subscribe("msh/2/json/LongFast/#")
+#    client.subscribe("msh/2/json/MediumFast/#")
+    client.subscribe("msh/decoded/data")
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
     rxTime = int(time.time())
-    channel = msg.topic.split("/")[3]
     try:
         payload = json.loads(msg.payload.decode("utf-8"))
+
+        nodeID = payload['from']
+        channel = payload['channel']
+
         db=MySQLdb.connect(config['MYSQL']['host'], config['MYSQL']['username'], config['MYSQL']['password'], config['MYSQL']['database'])
         c=db.cursor(MySQLdb.cursors.DictCursor)
-
-        nodeID=str(tohex(payload["from"], 32))
-        nodeID=nodeID[2:len(nodeID)]
-        for i in range(0, 8-len(nodeID)):
-            nodeID = "0"+nodeID
-        nodeID="!"+nodeID
 
         query = ("SELECT * FROM meshNodes where id=\"%s\"" % (nodeID, ))
         c.execute(query)
@@ -208,30 +211,30 @@ def on_message(client, userdata, msg):
         c.execute(query)
         dataPR = c.fetchall()
         if len(data) > 0:
-            if not (packetIsValid(db, c, nodeID, payload["id"], payload["timestamp"], payload["sender"])):
+            if not (packetIsValid(db, c, nodeID, payload["id"], payload["rxTime"], payload["sender"])):
                 discardLogger.debug("%s - Node %s(%s):\n%s" % (datetime.now(), nodeID, data[0]["shortName"], payload))
                 return
-            msgDT = datetime.fromtimestamp(payload["timestamp"])
+            msgDT = datetime.fromtimestamp(payload["rxTime"])
             if payload["type"] == "text":
                 pubPayload="{\"timestamp\":\"%s\", \"message\":\"%s (%s) - %s\", \"type\":\"text\", \"id\":\"%s\", \"reporter\":\"%s\"}" % (msgDT, data[0]["longName"], nodeID, payload["payload"]["text"], payload["id"], payload["sender"])
             else:
-                pubPayload="{\"timestamp\":\"%s\", \"message\":\"Received %s frame from %s (%s)\", \"type\":\"info\", \"id\":\"%s\", \"reporter\":\"%s\"}" % (msgDT, payload["type"], data[0]["longName"], nodeID, payload["id"], payload["sender"])
+                pubPayload="{\"timestamp\":\"%s\", \"message\":\"Received %s frame from %s (%s)\", \"type\":\"info\", \"id\":\"%s\", \"reporter\":\"%s (%s)\"}" % (msgDT, payload["type"], data[0]["longName"], nodeID, payload["id"], payload["sender"], getNodeName(db, c, payload["sender"]))
             logger.info("%s - Node %s(%s): processing %s packet %s received from %s" 
                      % (datetime.now(), nodeID, data[0]["shortName"], payload["type"], payload["id"], payload["sender"]))
             logger.info("%s - Node %s(%s): packet DateTime %s" 
-                     % (datetime.now(), nodeID, data[0]["shortName"], datetime.fromtimestamp(payload["timestamp"])))
+                     % (datetime.now(), nodeID, data[0]["shortName"], datetime.fromtimestamp(payload["rxTime"])))
             client.publish("msh/2/stat/updates", payload=pubPayload, qos=0, retain=False)
             mqttLogger.debug("%s - Node %s(%s):\n%s" % (datetime.now(), nodeID, data[0]["shortName"], payload))
             if payload["type"] == "position":
                 try:
-                    if "latitude_i" in payload["payload"]:
-                        auxLat = payload["payload"]["latitude_i"]/10000000
+                    if "latitudeI" in payload["payload"]:
+                        auxLat = payload["payload"]["latitudeI"]/10000000
                     else:
                         logger.info("%s - Node %s(%s): Latitude not available" % (datetime.now(), nodeID, data[0]["shortName"]))
                         auxLat = 0
 
-                    if "longitude_i" in payload["payload"]:
-                        auxLon = payload["payload"]["longitude_i"]/10000000
+                    if "longitudeI" in payload["payload"]:
+                        auxLon = payload["payload"]["longitudeI"]/10000000
                     else:
                         logger.info("%s - Node %s(%s): Longitude not available" % (datetime.now(), nodeID, data[0]["shortName"]))
                         auxLon = 0
@@ -248,8 +251,7 @@ def on_message(client, userdata, msg):
                         else:
                             logger.warning("%s - Node %s(%s): Altitude not available" % (datetime.now(), nodeID, data[0]["shortName"]))
 
-                    updateQuery(db, c, "meshNodes", "positionTimestamp", payload["timestamp"], nodeID)
-                    updateQuery(db, c, "meshNodes", "timestamp", payload["timestamp"], nodeID)
+                    updateQuery(db, c, "meshNodes", "positionTimestamp", payload["rxTime"], nodeID)
                     query = ("SELECT * from  nodesPositionHistory WHERE nodeID=\"%s\" ORDER BY timestamp DESC LIMIT 1"
                           % (nodeID,))
                     c.execute(query)
@@ -265,7 +267,7 @@ def on_message(client, userdata, msg):
                     if dist > 0.25:
                         logger.info("%s - Node %s(%s): Position history updated lat: %s lon: %s" % (datetime.now(), nodeID, data[0]["shortName"], auxLat, auxLon))
                         query = ("INSERT INTO nodesPositionHistory (nodeID, latitude, longitude, timestamp) VALUES (\"%s\", %s, %s, %s)"
-                              % (nodeID, auxLat, auxLon, payload["timestamp"],))
+                              % (nodeID, auxLat, auxLon, payload["rxTime"],))
                         c.execute(query)
                         db.commit()
                     else:
@@ -274,7 +276,7 @@ def on_message(client, userdata, msg):
                 except Exception as e:
                     logger.error("%s ERROR: %s" % (datetime.now(), e, ))
             if payload["type"] == "nodeinfo":
-               nodeName = payload["payload"]["longname"].replace("_", " ")
+               nodeName = payload["payload"]["longName"].replace("_", " ")
                logger.info("%s - Node %s(%s): received node name -> %s"
                            % (datetime.now(), nodeID, data[0]["shortName"], nodeName, ))
                matches = re.search("([A-Za-z0-9-\\\/]+\s?)(GW\s)?(433\s?|868\s?)?([A-Fa-f0-9]{4})?", nodeName)
@@ -289,9 +291,6 @@ def on_message(client, userdata, msg):
                    logger.error("%s ERROR: can't match %s -> %s" % (datetime.now(), nodeName, e, ))
                if matches[4] != None:
                    longName = longName + "_" + matches[4].strip(" ")
-               #print("%s | %s" % (payload["payload"]["longname"], matches.groups()))
-               #print("--%s--" % matches[2].strip())
-               #updateQuery(db, c, "meshNodes", "longName", longName, nodeID)
                try:
                    if matches[2].strip(" ") == "GW":
                        logger.info("%s - Node %s(%s): set as Router" % (datetime.now(), nodeID, data[0]["shortName"]))
@@ -305,46 +304,39 @@ def on_message(client, userdata, msg):
                except Exception as e:
                    logger.error("%s ERROR QRG match: %s" % (datetime.now(), e, ))
                try:
-                    #query = ("UPDATE meshNodes SET longname=\"%s\", shortname=\"%s\", hardware=\"%s\" WHERE id=\"%s\"" 
-                    #      % (longName, payload["payload"]["shortname"], hwModels[payload["payload"]["hardware"]], nodeID))
-                    #c.execute(query)
-                    #db.commit()
-                    updateQuery(db, c, "meshNodes", "longname", longName, nodeID)
-                    updateQuery(db, c, "meshNodes", "shortname", payload["payload"]["shortname"], nodeID)
-                    updateQuery(db, c, "meshNodes", "hardware", hwModels[payload["payload"]["hardware"]], nodeID)
-                    updateQuery(db, c, "meshNodes", "timestamp", payload["timestamp"], nodeID)
+                    updateQuery(db, c, "meshNodes", "longName", longName, nodeID)
+                    updateQuery(db, c, "meshNodes", "shortname", payload["payload"]["shortName"], nodeID)
+                    updateQuery(db, c, "meshNodes", "hardware", payload["payload"]["hwModel"].replace("_", " "), nodeID)
+                    #updateQuery(db, c, "meshNodes", "timestamp", payload["rxTime"], nodeID)
                except Exception as e:
                     logger.error("%s ERROR Update DB nodeinfo: %s" % (datetime.now(), e, ))
 
-            if payload["type"] == "telemetry":
-                if "temperature" in payload["payload"]:
-                    updateQuery(db, c, "meshNodes", "temperature", payload["payload"]["temperature"], nodeID)
-                if "barometric_pressure" in payload["payload"]:
-                    updateQuery(db, c, "meshNodes", "pressure", payload["payload"]["barometric_pressure"], nodeID)
-                if "relative_humidity" in payload["payload"]:
-                    updateQuery(db, c, "meshNodes", "humidity", payload["payload"]["relative_humidity"], nodeID)
-                if "battery_level" in payload["payload"] and payload["payload"]["battery_level"] != 0:
-                    updateQuery(db, c, "meshNodes", "batteryLevel", payload["payload"]["battery_level"], nodeID)
-                if "voltage" in payload["payload"] and "air_util_tx" in payload["payload"]:
-                    updateQuery(db, c, "meshNodes", "batteryVoltage", payload["payload"]["voltage"], nodeID)
-                if "air_util_tx" in payload["payload"]:
-                    updateQuery(db, c, "meshNodes", "airUtil", payload["payload"]["air_util_tx"], nodeID)
-                if "channel_utilization" in payload["payload"]:
-                    updateQuery(db, c, "meshNodes", "chUtil", payload["payload"]["channel_utilization"], nodeID)
-                if "voltage" in payload["payload"] and not "air_util_tx" in payload["payload"]:
-                    updateQuery(db, c, "meshNodes", "envVoltage", payload["payload"]["voltage"], nodeID)
-                if "current" in payload["payload"]:
-                    updateQuery(db, c, "meshNodes", "envCurrent", payload["payload"]["current"], nodeID)
-                updateQuery(db, c, "meshNodes", "timestamp", payload["timestamp"], nodeID)
+            if payload["type"] == "telemetry" and False:
+                deviceMetrics = payload["payload"]["deviceMetrics"]
+                environmentMetrics = payload["payload"]["environmentMetrics"]
 
+                for deviceMetricKey, deviceMetricValue in deviceMetrics.items():
+                    try:
+                        updateQuery(db, c, "meshNodes", deviceMetricKey, deviceMetricValue, nodeID)
+                    except Excetpion as e:
+                        logger.error("%s ERROR updating telemetry: %s" % (datetime.now(), e, ))
 
-#            if dataPR[0]["packetRateTS"] != 0:
-#                auxPR = rxTime - dataPR[0]["packetRateTS"] + dataPR[0]["packetRate"]
-#                PR = auxPR/2 if dataPR[0]["packetRate"]!=0 else auxPR
-#                updateQuery(db, c, "packetRates", "packetRate", PR, nodeID)
-#                logger.info("%s - Node %s(%s): Packet Rate %ss"
-#                         % (datetime.now(), nodeID, data[0]["shortName"], PR, ))
-#            updateQuery(db, c, "packetRates", "packetRateTS", rxTime, nodeID)
+                for environmentMetricKey, environmentMetricValue in environmentMetrics.items():
+                    try:
+                        updateQuery(db, c, "meshNodes", environmentMetricKey, environmentMetricValue, nodeID)
+                    except Excetpion as e:
+                        logger.error("%s ERROR updating telemetry: %s" % (datetime.now(), e, ))
+
+            #update Timestamp, SNR and RSSI
+            updateQuery(db, c, "meshNodes", "timestamp", payload["rxTime"], nodeID)
+            updateQuery(db, c, "meshNodes", "rxSnr", payload["rxSnr"], nodeID)
+            updateQuery(db, c, "meshNodes", "rxRssi", payload["rxRssi"], nodeID)
+
+            #update gwID and Sender (maybe always the same?)
+            updateQuery(db, c, "meshNodes", "gwID", payload["gwID"], nodeID)
+            updateQuery(db, c, "meshNodes", "sender", payload["sender"], nodeID)
+
+            #Compute PacketRate
             PR = computePacketRate(db, c, nodeID, int(time.time()))
             logger.info("%s - Node %s(%s): Packet Rate %s(s) / %s(p/h)"
                      % (datetime.now(), nodeID, data[0]["shortName"], PR[0], PR[1]))
@@ -355,7 +347,7 @@ def on_message(client, userdata, msg):
                 logger.info("###########################################################")
                 logger.info("%s - Node %s: Insert into DB" % (datetime.now(), nodeID,))
                 logger.info("###########################################################")
-                query = ("INSERT INTO meshNodes (id, positionTimestamp,timestamp) VALUES (\"%s\", \"%s\", \"%s\")" % (nodeID, 0, payload["timestamp"],))
+                query = ("INSERT INTO meshNodes (id, positionTimestamp,timestamp) VALUES (\"%s\", \"%s\", \"%s\")" % (nodeID, 0, payload["rxTime"],))
                 c.execute(query)
                 db.commit()
                 query = ("INSERT INTO packetRates (id, packetRateTS) VALUES (\"%s\", \"{\\\"ts\\\":[]}\")" % (nodeID, ))
