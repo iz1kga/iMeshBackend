@@ -57,52 +57,6 @@ if not os.path.isfile(configFile):
 config = configparser.ConfigParser()
 config.read(configFile)
 
-hwModels = { 0:"UNSET",
-             1:"TLORA_V2",
-             2:"TLORA_V1",
-             3:"TLORA_V2_1_1P6",
-             4:"TBEAM",
-             5:"HELTEC_V2_0",
-             6:"TBEAM_V0P7",
-             7:"T_ECHO",
-             8:"TLORA_V1_1P3",
-             9:"RAK4631",
-             10:"HELTEC_V2_1",
-             11:"HELTEC_V1",
-             12:"LILYGO_TBEAM_S3_CORE",
-             13:"RAK11200",
-             14:"NANO_G1",
-             15:"TLORA_V2_1_1P8",
-             16:"TLORA_T3_S3",
-             17:"NANO_G1_EXPLORER",
-             25:"STATION_G1",
-             32:"LORA_RELAY_V1",
-             33:"NRF52840DK",
-             34:"PPR",
-             35:"GENIEBLOCKS",
-             36:"NRF52_UNKNOWN",
-             37:"PORTDUINO",
-             39:"DIY_V1",
-             40:"NRF52840_PCA10059",
-             41:"DR_DEV",
-             42:"M5STACK",
-             43:"HELTEC_V3",
-             44:"HELTEC_WSL_V3",
-             45:"BETAFPV_2400_TX",
-             46:"BETAFPV_900_NANO_TX",
-             255:"PRIVATE_HW"
-           }
-
-
-
-("UNSET", "TLORA_V2", "TLORA_V1", "TLORA_V2_1_1P6",
-            "TBEAM", "HELTEC_V2_0", "TBEAM_V0P7", "T_ECHO",
-            "TLORA_V1_1P3", "RAK4631", "HELTEC_V2_1", "HELTEC_V1",
-            "LILYGO_TBEAM_S3_CORE", "RAK11200", "NANO_G1", "TLORA_V2_1_1P8", 
-            "STATION_G1", "LORA_RELAY_V1", "NRF52840DK", "PPR", "GENIEBLOCKS", 
-            "NRF52_UNKNOWN", "PORTDUINO", "ANDROID_SIM", "DIY_V1", "NRF52840_PCA10059", 
-            "DR_DEV", "M5STACK", "PRIVATE_HW")
-
 def tohex(val, nbits):
   return hex((val + (1 << nbits)) % (1 << nbits))
 
@@ -159,36 +113,10 @@ def getNodeName(db, c, id):
     data = c.fetchall()
     return str(data[0]['longName'])
 
-def packetIsValid(db, c, nodeID, packetID, timestamp, sender):
-    historyLimit = 1800
-    try:
-        query = ("DELETE FROM packetIdHistory WHERE timestamp<%s" % (int(time.time()) - historyLimit))
-        c.execute(query)
-        db.commit()
-    except Exception as e:
-        logger.error("%s ERROR: %s" % (datetime.now(), e, ))
-    try:
-        query = ("SELECT * FROM packetIdHistory WHERE nodeID=\"%s\" AND packetID=%s" % (nodeID, packetID))
-        c.execute(query)
-        data = c.fetchall()
-        if len(data)>0:
-            logger.debug("%s - Node %s: Packet %s reported by %s allready processed" % (datetime.now(), nodeID, packetID, sender))
-            return False
-        else:
-            query = ("INSERT INTO packetIdHistory (nodeID, packetID, timestamp) VALUES (\"%s\", %s, %s)"
-                     % (nodeID, packetID, timestamp))
-            c.execute(query)
-            db.commit()
-            return True
-    except Exception as e:
-        logger.error("ERROR checking %s for Node %s: %s" % (packetID, nodeID, e, ))
-        return False
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
     logger.info("%s - Connected with result code %s" % (datetime.now(), str(rc), ))
-#    client.subscribe("msh/2/json/LongFast/#")
-#    client.subscribe("msh/2/json/MediumFast/#")
     client.subscribe("msh/decoded/data")
 
 # The callback for when a PUBLISH message is received from the server.
@@ -211,9 +139,6 @@ def on_message(client, userdata, msg):
         c.execute(query)
         dataPR = c.fetchall()
         if len(data) > 0:
-            if not (packetIsValid(db, c, nodeID, payload["id"], payload["rxTime"], payload["sender"])):
-                discardLogger.debug("%s - Node %s(%s):\n%s" % (datetime.now(), nodeID, data[0]["shortName"], payload))
-                return
             msgDT = datetime.fromtimestamp(payload["rxTime"])
             if payload["type"] == "text":
                 pubPayload="{\"timestamp\":\"%s\", \"message\":\"%s (%s) - %s\", \"type\":\"text\", \"id\":\"%s\", \"reporter\":\"%s\"}" % (msgDT, data[0]["longName"], nodeID, payload["payload"]["text"], payload["id"], payload["sender"])
